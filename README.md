@@ -20,19 +20,24 @@ The fabrication of an emotion detection sentiment analysis that recognizes Emoji
 
 (- What is the specific question are you trying to answer?)
 
-I will evaluate the induced emotion profiles of Emojis with regard to their ability to predict word affect intensities as well as sentiment scores of tweets.
+With Emojis being an ever growing facet of online language how are users utilizing them in their discourse regarding businesses and their products? I will evaluate the emotion profiles of Emojis with regard to their ability to predict word affect intensities as well as the difference in the sentiment scores of tweets possessing them. Further, if the use of combination adds expressive intensity and transforms the underlying emotional state being expressed.
 
 (- How will you answer it?)
 
+To answer my research question I will conduct a emotional detective sentiment analysis and then machine learning classification. First, for the sentiment analysis I will utilize tidy text to unnest each word and Emoji and then apply the nrc emotional lexicon (Saif Mohammad and Peter Turney) to join on emotional sentiment classes. Lastly, I will conduct Naive Bayes Binary classification and Random Forest modeling to classify each tweet and predict which Emojis will appear in each tweet.
 
 (- What do you expect/hope to find?)
 
+Emojis are a new facet of our language and with gaining popularity they will begin to at large replace some words in messages so the expression and sentiment they hold is going to gain more and more interest. I expect for Emojis such as the heart or frowny face to hold true to their constructed expression, but for a multitude of significantly used Emojis to have high variance in expression. Through this framework I hope to better understand not only how individuals are utilizing Emojis to create discourse about businesses but also which Emojis have the most narrow use pattern and have high emotional intensity associated with them.
 
 ## Conclusion (2-3 paragraphs)
 
 (- Summarize the problem and your solution.
 - If applicable, describe how your solution could be important beyond your specific context--i.e. can it be generalized?)
 
+With the creation of Emojis it has allowed users another medium of expression in their online messaging but with traditional sentiment analysis the expressive power and occurrence of Emojis has not been able to be analyzed. By analyzing the emotional intensity and sentiment of business and product review tweets it can provide insights on the underlying expression being conveyed by the Emoji. Through machine learning classification algorithms it can be revealed how predictive Emojis are of sentiment and emotional intensity which could provide great insight for researchers as well as businesses to better understand users in this new age.
+
 
 (- Discuss limitations and potential future directions to take the project.)
   
+  The limitations of this research fall are similar to those of traditional sentiment analysis. Because multiple targets could exist within a tweet (e.g. company and its product) the sentiment analysis will not distinguish between differing sentiment existing between the two targets. Instead if two companies are being compared the sentiment analysis may only recognize the strongest intensity emotion of the various targets. Further another limitation is the accuracy of the emotional lexicon which may not accurately score opinion words in the sense they are actually being utilized. But regardless from this project a future direction that could be explored is the effect of Emoji utilization in business advertisements. Since these characters have been shown to hold expression and emotional intensity the analyzation of how consumers respond to advertisements utilizing Emojis compared to those that dont could reveal how Emojis could serve to improve the successful conveyance of marketing messages online.
