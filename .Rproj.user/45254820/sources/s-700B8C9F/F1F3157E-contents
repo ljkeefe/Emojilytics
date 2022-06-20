@@ -1,0 +1,173 @@
+---
+title: "WordCloud Template"
+author: "Liam Keefe"
+date: "10/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Word Cloud
+
+### Libraries
+
+``` {r}
+library(readxl)
+library(tidyverse)
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(RColorBrewer)
+library(XML)
+library(RCurl)
+library(XML)
+```
+
+## Word Cloud Function
+
+``` {r}
+rquery.wordcloud <- function(x, type=c("text", "url", "file"), 
+                          lang="english", excludeWords=NULL, 
+                          textStemming=FALSE,  colorPalette="Dark2",
+                          min.freq=3, max.words=200)
+{
+
+if(type[1]=="file") text <- readLines(x)
+  else if(type[1]=="url") text <- html_to_text(x)
+  else if(type[1]=="text") text <- x
+
+# Load the text as a corpus
+  docs <- Corpus(VectorSource(text))
+  # Convert the text to lower case
+  docs <- tm_map(docs, content_transformer(tolower))
+  # Remove numbers
+  docs <- tm_map(docs, removeNumbers)
+  # Remove stopwords for the language 
+  docs <- tm_map(docs, removeWords, stopwords(lang))
+  # Remove punctuations
+  docs <- tm_map(docs, removePunctuation)
+  # Eliminate extra white spaces
+  docs <- tm_map(docs, stripWhitespace)
+  # Remove your own stopwords
+  if(!is.null(excludeWords)) 
+    docs <- tm_map(docs, removeWords, excludeWords) 
+  # Text stemming
+  if(textStemming) docs <- tm_map(docs, stemDocument)
+
+ # Create term-document matrix
+  tdm <- TermDocumentMatrix(docs)
+  m <- as.matrix(tdm)
+  v <- sort(rowSums(m),decreasing=TRUE)
+  d <- data.frame(word = names(v),freq=v)
+  # check the color palette name 
+  if(!colorPalette %in% rownames(brewer.pal.info)) colors = colorPalette
+  else colors = brewer.pal(8, colorPalette) 
+
+set.seed(1234)
+  wordcloud(d$word,d$freq, min.freq=min.freq, max.words=max.words,
+            random.order=FALSE, rot.per=0.35, 
+            use.r.layout=FALSE, colors=colors)
+  
+  invisible(list(tdm=tdm, freqTable = d))
+  }
+```
+
+# Helper Function
+### Download and parse webpage
+
+``` {r}
+html_to_text <- function(url){
+html.doc <- getURL(url)  
+doc = htmlParse(html.doc, asText=TRUE)
+text <- xpathSApply(doc, "//text()[not(ancestor::script)][not(ancestor::style)][not(ancestor::noscript)][not(ancestor::form)]", xmlValue)
+return(paste(text, collapse = " "))
+}
+```
+
+## Create a Word Cloud From a Plain Text File
+
+``` {r}
+source('http://www.sthda.com/upload/rquery_wordcloud.r')
+filePath <- "http://www.sthda.com/sthda/RDoc/example-files/martin-luther-king-i-have-a-dream-speech.txt"
+res<-rquery.wordcloud(filePath, type ="file", lang = "english")
+res5<-rquery.wordcloud("~/Downloads/trump-speeches-master/speeches.txt", type ="file", lang = "english")
+res5
+```
+
+## Create a Word Cloud of a Web Page
+
+``` {r}
+url = "http://www.sthda.com/english/wiki/create-and-format-powerpoint-documents-from-r-software"
+rquery.wordcloud(x=url, type="url")
+```
+
+# Again
+
+``` {r}
+url = "http://www.sthda.com/english/articles/40-regression-analysis/165-linear-regression-essentials-in-r/"
+rquery.wordcloud(x=url, type="url")
+```
+
+``` {r}
+url = "https://jamesclear.com/great-speeches/the-fringe-benefits-of-failure-by-j-k-rowling"
+rquery.wordcloud(x=url, type="url")
+```
+
+
+``` {r}
+Smartphone <- read_excel("Library/Containers/com.apple.mail/Data/Library/Mail Downloads/A67AFEE8-F599-40EE-91B9-B4FD194B5C60/Smartphone Usage and Addiction_November 2, 2021_10.18.xlsx", 
+    sheet = "Sheet3")
+res2 <- rquery.wordcloud(x=Smartphone[1:3], type="text")
+res2
+
+rquery.wordcloud(x=Statcast_2019 %>% filter(events %in% c("single", "double", "triple", "home_run")) %>% mutate(group = ifelse(launch_angle > 35, "Above", ifelse(launch_angle < 15, "Below", "Ideal"))) %>% group_by(group) %>%select(events), type="text")
+```
+
+``` {r}
+resd <- rquery.wordcloud(x="https://factba.se/biden/transcript/joe-biden-remarks-november-jobs-report-december-3-2021", type="url")
+resd
+```
+
+
+## Operations that Can be Done From the Cloud Function
+
+``` {r}
+tdm <- res$tdm
+freqTable <- res$freqTable
+```
+
+### Frequency Table of Words
+
+``` {r}
+# Top 10
+head(freqTable, 10)
+# Bar plot of the frequency for the top10
+barplot(freqTable[1:10,]$freq, las = 2, 
+        names.arg = freqTable[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+```
+
+### Operations on "term-document matrix"
+
+``` {r}
+# Identify terms that meet desired frequency level 
+findFreqTerms(tdm, lowfreq = 4)
+
+# Identify Correlation Between Terms
+findAssocs(tdm, terms = "freedom", corlimit = 0.3)
+```
+
+``` {r}
+full_speech <- read.delim("~/Downloads/full_speech.txt", header=FALSE) %>%
+  filter(!is.na(V1))
+res11 <- rquery.wordcloud(x=full_speech, type="text")
+head(res11$freqTable,10)
+```
+
+``` {r}
+res_cnn<-rquery.wordcloud("https://transcripts.cnn.com/show/rs/date/2021-12-26/segment/01", type ="file", lang = "english")
+res_cnn
+```

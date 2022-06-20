@@ -5,6 +5,65 @@ date: '2022-06-20T11:20:40-07:00'
 
 
 
-<pre class="r"><code>mean(cars$speed)</code></pre>
-<pre><code>## [1] 15.4</code></pre>
-<p>There is content</p>
+<p>To analyze emoji use I will be conducting an emotional text analysis utilizing the nrc lexicon to classify emojis according to emotion. First, the data requires some cleaning of the tweet text content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional lexicon.</p>
+<pre class="r"><code>tweets_ji &lt;- tweets_data_raw %&gt;%
+  mutate(emojis = emo::ji_extract_all(Tweet_text)) %&gt;%
+  mutate(Tweet_text = ji_replace_all(Tweet_text, &quot;&quot;)) %&gt;%
+  unnest_wider(emojis)
+
+tweets_data_raw$index = 1:nrow(tweets_data_raw)
+tweets_ji$index = 1:nrow(tweets_ji)
+
+tweets_words &lt;- tweets_data_raw %&gt;%
+  mutate(Tweet_text = str_replace_all(Tweet_text, &quot;https://.+|@[^ ]+ &quot;, &quot;&quot;)) %&gt;%
+  unnest_tokens(word, Tweet_text)</code></pre>
+<p>For this piece I just wanted to explore the differences seen in this small sample of tweets from ESPN between positive and negative emotion. I created lists of the various words making up those two emotions from the nrc lexicon, then filtered the tweet word table for those various words, and finally joined the table containing the extracted emojis associated with the tweet.</p>
+<pre class="r"><code>## Creating lists of positive and negative words from nrc lexicon
+good_words &lt;- get_sentiments(&quot;nrc&quot;) %&gt;%
+  filter(sentiment %in% c(&quot;positive&quot;))
+sad_words &lt;- get_sentiments(&quot;nrc&quot;) %&gt;%
+  filter(sentiment %in% c(&quot;negative&quot;))
+
+## Filtering words from ESPN tweets according to each list
+common_ji_happy &lt;- tweets_words %&gt;%
+  inner_join(good_words, by=c(&quot;word&quot; = &quot;word&quot;)) %&gt;%
+  inner_join(tweets_ji) %&gt;%
+  group_by(...1) %&gt;%
+  summarize(n = n()) %&gt;%
+  left_join(emojis, by= c(...1 = &quot;code&quot;)) %&gt;%
+  filter(!is.na(description))
+
+common_ji_sad &lt;- tweets_words %&gt;%
+  inner_join(sad_words, by=c(&quot;word&quot; = &quot;word&quot;)) %&gt;%
+  inner_join(tweets_ji) %&gt;%
+  group_by(...1) %&gt;%
+  summarize(n = n()) %&gt;%
+  left_join(emojis, by= c(...1 = &quot;code&quot;)) %&gt;%
+  filter(!is.na(description))</code></pre>
+<p>Something I thought may be interesting was the emojis that were unique to positive and negative emotions for tweets relating to sports. By joining the positive and negative emoji tables on eachother through left joins it reveals those unique emoji characters.</p>
+<pre class="r"><code>## Identifying which emojis are unique to positive and negative emotion
+common_ji_happy %&gt;%
+  left_join(common_ji_sad, by=c(&quot;description&quot; = &quot;description&quot;)) %&gt;%
+  filter(is.na(n.y)) %&gt;%
+  select(description)</code></pre>
+<pre><code>## # A tibble: 7 × 1
+##   description             
+##   &lt;chr&gt;                   
+## 1 sparkles                
+## 2 cyclone                 
+## 3 basketball              
+## 4 trophy                  
+## 5 snake                   
+## 6 ring                    
+## 7 grinning face with sweat</code></pre>
+<pre class="r"><code>common_ji_sad %&gt;%
+  left_join(common_ji_happy, by=c(&quot;description&quot; = &quot;description&quot;)) %&gt;%
+  filter(is.na(n.y)) %&gt;%
+  select(description)</code></pre>
+<pre><code>## # A tibble: 3 × 1
+##   description
+##   &lt;chr&gt;      
+## 1 ice hockey 
+## 2 books      
+## 3 fire</code></pre>
+<p>When looking over tweets that come from a much more broad audience I would expect for the emojis that are unique a single emotion to not be as robust as in this analysis I do expect for a similar trend to occur. The emojis that relate to positive emotions will be much more clear than those of more negative emotions due to the more robust number of sub-emotions that exist in the nrc lexicon that are more negative. Therefor it is going to take a much deeper analysis to mine meaning from the output recieved and makes analyzing the emotional spectrum of each emoji to determine its overall use pattern.</p>

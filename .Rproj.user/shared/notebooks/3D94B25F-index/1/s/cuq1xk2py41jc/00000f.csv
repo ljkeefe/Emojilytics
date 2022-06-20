@@ -1,0 +1,5 @@
+"0","## Identifying which emojis are unique to positive and negative emotion"
+"0","common_ji_happy %>%"
+"0","  left_join(common_ji_sad, by=c(""description"" = ""description"")) %>%"
+"0","  filter(is.na(n.y)) %>%"
+"0","  select(description)"

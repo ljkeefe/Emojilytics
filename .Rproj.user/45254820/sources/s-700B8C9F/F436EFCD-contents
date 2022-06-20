@@ -1,0 +1,174 @@
+---
+title: "Homework 4"
+author: ""
+date: "02/4/2022"
+output: 
+  html_document:
+    df_print: kable
+    fig_width: 11
+    fig_height: 8
+---
+
+**Directions:**
+
+Please turn in **both** a knitted HTML file *and* your Rmd file on WISE.
+
+Good luck!
+
+# 1. Setup (1pt)
+
+Change the author of this RMD file to be yourself and modify the below code so that you can successfully load the 'wine.rds' data file from your own computer.
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(caret)
+library(naivebayes)
+library(tidytext)
+library(scales)
+wine = read_rds("./resources/pinot.rds")
+```
+
+# 2. Conditional Probability (3pts)
+
+Calculate $P(Burgundy | Fruit)$
+
+...i.e. the probability that a Pinot comes from Burgundy given it has the word 'fruit' in the description.
+
+```{r}
+# Probability of event A
+burg_split <- wine %>%
+   mutate(burg01 = province == "Burgundy") %>%
+ mutate(fruit01 = str_detect(description, "fruit"))
+
+pA <- burg_split %>%
+  summarize(p_a = sum(burg01, na.rm=TRUE)/n())
+
+# Probability of event B|A
+fruit_burg <- burg_split %>%
+  filter(burg01 == TRUE)
+  
+pBA <- fruit_burg %>%
+  summarize(p_b_a = sum(fruit01, na.rm=TRUE)/n())
+
+# Probability of event B
+pB <- burg_split %>%
+  summarize(p_b = sum(fruit01, na.rm=TRUE)/n())
+
+# Conditional Probability event A (burgundy) | B (fruit)
+tibble("P (Burgundy | Fruit)" = label_percent(accuracy=0.01)((pBA$p_b_a*pA$p_a)/pB$p_b))
+```
+*Answer:* The conditional probability of a Pinot coming from Burgundy given that it has fruit as a descriptor word is 21.96%.
+
+# 3. Naive Bayes Algorithm (4pts)
+
+1. Train a naive bayes algorithm to classify a wine's province,
+2. using 80% of your data,
+3. three features engineered from the description
+4. and 5-fold cross validation.
+5. Report Kappa after using your model to predict provinces in the holdout (test) sample.
+
+```{r}
+# Creating features of description word
+wino <- wine %>%
+  mutate(cherry01 = str_detect(description, "cherry")) %>%
+  mutate(earth01 = str_detect(description, "earth")) %>%
+  mutate(berry01 = str_detect(description, "berry")) %>%
+  select(-description)
+```
+
+``` {r}
+# Creating training and test partitioned data-sets
+set.seed(504)
+wine_index <- createDataPartition(wino$province, p = 0.80, list = FALSE)
+train <- wino[ wine_index, ]
+test <- wino[-wine_index, ]
+
+# Native Bayes algorithm for wine province
+m1 <- train(province ~ .,
+             data = train, 
+             method = "naive_bayes",
+             tuneGrid = expand.grid(usekernel = c(T,F), laplace = T, adjust = T),
+             metric = "Kappa",
+             trControl = trainControl(method = "cv", number=5))
+
+# Predicting training model on test data-set
+tibble(Kappa = confusionMatrix(predict(m1, test),factor(test$province))$overall["Kappa"])
+```
+*Answer:* After creating a model on the training set and predicting it on the test set the Kappa value of the model is 0.3159. Which suggests that the precision of the model is somewhat good compared to random chance.
+
+# 4. Frequency differences (2pts)
+
+List the three words that most distinguish New York Pinots from all other Pinots.
+
+```{r}
+word_list <- wine %>%
+  # Un-nesting each word in descriptions
+  unnest_tokens(word, description) %>%
+  # Removing stopwords
+  anti_join(stop_words) %>% 
+  # Removing generic terms
+  filter(!(word %in% c("wine", "pinot", "noir"))) %>%
+  # Counting occurrence in each description
+  count(id, word) %>% 
+  group_by(id) %>% 
+  # Calculating frequency
+  mutate(freq = n/sum(n)) %>%
+  ungroup() %>% 
+  group_by(word) %>% 
+  # Counting total occurrence
+  mutate(total = sum(n))
+```
+
+``` {r}
+## Words seen in Pinots from New York
+ny_wl <- word_list %>% 
+  left_join(select(wine, id, province), by = "id") %>%
+  ## Filtering for New York Pinots
+  filter(province == "New_York") %>% 
+  ungroup() %>%
+  ## Counting total occurrences
+  group_by(word) %>%
+  mutate(tot=sum(n)) %>%
+  distinct(word,.keep_all=TRUE) %>%
+  select(word,tot) %>%
+  ungroup() %>%
+  ## Calculating frequency
+  mutate(freq = tot/sum(tot))
+
+# Words seen in Pinots NOT from New York
+other_wl <- word_list %>% 
+  left_join(select(wine, id, province), by = "id") %>%
+  ## Filtering out New York Pinots
+  filter(province != "New_York") %>% 
+  ungroup() %>%
+  ## Counting total occurrences
+  group_by(province, word) %>%
+  mutate(tot=sum(n)) %>%
+  distinct(word,.keep_all=TRUE) %>%
+  select(province, word,tot) %>%
+  ungroup() %>%
+  group_by(province) %>%
+  ## Calculating frequency
+  mutate(freq = tot/sum(tot)) %>%
+  ungroup() %>%
+  group_by(word) %>%
+  summarize(other_max_freq = max(freq, na.rm=TRUE), other_avg_freq = mean(freq, na.rm=TRUE), provs=n())
+```
+
+``` {r}
+# Frequency difference of words seen in descriptions for New York Wines
+dw_ny <- ny_wl %>%
+  left_join(other_wl, by="word") %>%
+  ## Calculating difference in frequencies
+  mutate(freq_diff = freq - other_avg_freq) %>%
+  arrange(desc(freq_diff))
+
+dw_ny %>%
+  ## Filtering out words that appear in wines from all provinces (total 6 but filtered for 5 since New York isn't accounted for in provs variable)
+  filter(provs < 5) %>%
+  select(word, tot, freq, freq_diff, provs) %>%
+  head(3)
+```
+
+*Answer:* After comparing words that appear in the descriptions of New York Pinots and those in the other provinces the three words that have the greatest difference in frequency, and do not appear in wines from all provinces, are: brisk, bramble, and tones. The value of frequency difference I have constructed was chosen to be against the frequency of the province with the highest frequency of the word rather than the mean. This is because if the other provinces are averaged the frequency difference would not truly distinguish the words which appear in the greatest extent in New York wines. By comparing against the mean frequency one of the other provinces could actually have a higher frequency of the word but due to the frequencies of the word in the other 4 provinces it could suppress the mean value.

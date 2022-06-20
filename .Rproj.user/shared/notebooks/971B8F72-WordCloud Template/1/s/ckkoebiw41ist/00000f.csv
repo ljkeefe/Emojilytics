@@ -1,0 +1,31 @@
+"0","library(readxl)"
+"0","library(tidyverse)"
+"0","library(tm)"
+"2","Loading required package: NLP
+"
+"2","
+Attaching package: ‘NLP’
+
+"
+"2","The following object is masked from ‘package:ggplot2’:
+
+    annotate
+
+"
+"0","library(SnowballC)"
+"0","library(wordcloud)"
+"2","Loading required package: RColorBrewer
+"
+"0","library(RColorBrewer)"
+"0","library(XML)"
+"0","library(RCurl)"
+"2","
+Attaching package: ‘RCurl’
+
+"
+"2","The following object is masked from ‘package:tidyr’:
+
+    complete
+
+"
+"0","library(XML)"

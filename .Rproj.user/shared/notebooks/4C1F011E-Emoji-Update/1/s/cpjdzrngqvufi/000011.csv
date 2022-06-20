@@ -1,0 +1,21 @@
+"0","tweets <-"
+"0","  get_all_tweets("
+"0","    query = ""#BlackLivesMatter"","
+"0","    start_tweets = ""2020-01-01T00:00:00Z"","
+"0","    end_tweets = ""2020-01-05T00:00:00Z"","
+"0","    file = ""blmtweets"","
+"0","    data_path = ""data/"","
+"0","    n = 1000000,"
+"0","  )"
+"1","query: "
+"1"," "
+"1","#BlackLivesMatter"
+"1"," "
+"1","
+"
+"2","Warning:"
+"2"," Directory already exists. Existing JSON files may be parsed and returned, choose a new path if this is not intended.
+"
+"2","Error in make_query(url = endpoint_url, params = params, bearer_token = bearer_token,  : 
+  something went wrong. Status code: 403
+"

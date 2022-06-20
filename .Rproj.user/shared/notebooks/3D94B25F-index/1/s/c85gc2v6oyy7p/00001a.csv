@@ -1,0 +1,11 @@
+"0","tweets_words %>%
+  inner_join(good_words, by=c(""word"" = ""word"")) %>%
+  inner_join(tweets_ji) %>%
+  group_by(...1) %>%
+  summarize(n = unique(index))
+"
+"1","[38;5;232mJoining, by = ""index""[39m
+"
+"1","[38;5;232m`summarise()` has grouped output by '...1'. You can override using the `.groups`
+argument.[39m
+"

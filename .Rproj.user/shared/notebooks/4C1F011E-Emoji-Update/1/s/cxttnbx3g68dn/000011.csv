@@ -1,0 +1,11 @@
+"0","library(""academictwitteR"")"
+"2","Warning:"
+"2"," package ‘academictwitteR’ was built under R version 4.0.5
+"
+"0","set_bearer()"
+"1","Instructions:
+"
+"1","[33mℹ[39m 1. Add line: TWITTER_BEARER=YOURTOKENHERE to .Renviron on new line, replacing YOURTOKENHERE with  actual bearer token
+"
+"1","[33mℹ[39m 2. Restart R
+"
