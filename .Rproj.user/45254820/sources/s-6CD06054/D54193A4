@@ -3,7 +3,7 @@
     "path": "~/myWebsite/content/post/2022-06-20-project-update/index.Rmd",
     "project_path": "content/post/2022-06-20-project-update/index.Rmd",
     "type": "r_markdown",
-    "hash": "379080713",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1655748676280.0,
@@ -12,15 +12,15 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "7,0",
+        "cursorPosition": "3,3",
         "scrollLine": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1655748779,
+    "lastKnownWriteTime": 1655749324,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1655748779175,
+    "last_content_update": 1655749324809,
     "read_only": false,
     "read_only_alternatives": []
 }
