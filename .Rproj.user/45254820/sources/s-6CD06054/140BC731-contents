@@ -1,6 +1,6 @@
 ---
-date: "2022-06-13T20:05:45-07:00"
-title: Emojilytics
+title: "Emojilytics"
+date: '2022-06-13T20:05:45-07:00'
 ---
 
 ## Abstract
