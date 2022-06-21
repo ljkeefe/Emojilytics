@@ -3,7 +3,7 @@ title: "Emojilytics - Project Update 1"
 date: '2022-06-20T11:20:40-07:00'
 ---
 
-The data I'm going to be looking at are the body text of tweets that will be pulled from the Twitter API. This data is going to contain contents such as descriptive content (words, sentences), emoji characters, hyperlinks, and account handles. Therefor given the nature of this data the content is going to need much cleaning in order to separate the various components needed from within each tweet. The major limitation of this data is its retrieval method because the tweets I get are completely determined by the query I construct that filters the results. But since I am just looking at body content the other portions of data retrieval and preparation wont be as intensive.
+The data I'm going to be looking at are tweets that will be pulled from the Twitter API. This data is going to contain content such as descriptive content (words, sentences), emoji characters, hyperlinks, account handles, etc. Therefore given the nature of this data there is going to be a need for cleaning in order to separate the descriptive content from within each tweet. The major limitation of this data is its retrieval method because the tweets I get are completely determined by the query I construct and insufficient filter parameters will effect the tweets I receive.
 
 ```{r, echo=FALSE, results="hide", message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -14,7 +14,7 @@ library(emo)
 tweets_data_raw <- read_csv("./tweety.csv")
 ```
 
-To analyze emoji use I will be conducting an emotional text analysis utilizing the nrc lexicon to classify emojis according to emotion. First, the data requires some cleaning of the tweet text content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional lexicon.
+To analyze emoji usage I will be conducting an emotional text analysis utilizing the nrc lexicon of tidytext to classify emojis according to emotion category. First, the data requires some cleaning of the tweet text content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional lexicon.
 
 ```{r, results=FALSE, message=FALSE, warning=FALSE}
 tweets_ji <- tweets_data_raw %>%
