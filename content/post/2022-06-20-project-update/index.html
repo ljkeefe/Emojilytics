@@ -5,6 +5,7 @@ date: '2022-06-20T11:20:40-07:00'
 
 
 
+<p>The data I’m going to be looking at are the body text of tweets that will be pulled from the Twitter API. This data is going to contain contents such as descriptive content (words, sentences), emoji characters, hyperlinks, and account handles. Therefor given the nature of this data the content is going to need much cleaning in order to separate the various components needed from within each tweet. The major limitation of this data is its retrieval method because the tweets I get are completely determined by the query I construct that filters the results. But since I am just looking at body content the other portions of data retrieval and preparation wont be as intensive.</p>
 <p>To analyze emoji use I will be conducting an emotional text analysis utilizing the nrc lexicon to classify emojis according to emotion. First, the data requires some cleaning of the tweet text content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional lexicon.</p>
 <pre class="r"><code>tweets_ji &lt;- tweets_data_raw %&gt;%
   mutate(emojis = emo::ji_extract_all(Tweet_text)) %&gt;%
