@@ -1,0 +1,593 @@
+---
+title: "Emojilytics: Nike"
+date: '2022-08-01T6:00:00-07:00'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE, 
+  fig.align='center', 
+  show_col_types = FALSE
+  )
+```
+
+```{r packages}
+library(tidyverse)
+library(tidytext)
+library(rtweet)
+library(knitr)
+library(scales)
+library(emo)
+library(caret)
+library(fastDummies)
+library(tm)
+library(reshape2)
+library(ggthemes)
+library(rpart.plot)
+library(lexicon)
+library(ROSE)
+library(kableExtra)
+```
+
+```{r funcs}
+TableHeader <- function(x) str_c("<center><strong>",x,"</strong></center>")
+justodd <- function(x) x[ x %% 2 == 1 ]
+```
+
+## Data
+
+The data I'm going to be looking at are tweets that will be retrieved through the Twitter API. This data is going to contain content such as descriptive content (words, sentences), emoji characters, hyperlinks, account handles, etc. Therefore given the nature of this data there is going to be a need for cleaning in order to separate the descriptive content from within each tweet. The major limitation of this data is its retrieval method because the tweets I get are completely determined by the query I construct and insufficient filter parameters will effect the tweets I receive. To analyze emoji usage I will be conducting an emotional text analysis utilizing the nrc lexicon of tidytext to classify emojis according to emotion category. 
+
+```{r data}
+## Loading in datasets
+nike_tweets_raw <- read_csv("niketweety.csv")
+nike_tweets_raw_em <- read_csv("niketweetyemojis.csv")
+
+## Index for tweet dataset
+nike_tweets_raw$index = 1:nrow(nike_tweets_raw)
+nike_tweets_raw_em$index = 1:nrow(nike_tweets_raw_em)
+
+```
+
+```{r lexicon} 
+## Sentiments
+nrc_l <- get_sentiments("nrc")
+
+## Intensities
+afinn <- get_sentiments("afinn")
+
+## Watch your profanity
+profanities <- tibble(word = c(profanity_alvarez,profanity_arr_bad, profanity_banned))
+```
+
+## Data Cleaning
+
+First, the data requires some cleaning of the tweet text content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional lexicon.
+
+``` {r}
+tweets_words <- nike_tweets_raw %>%
+  # Removing Hyperlinks and Account Handles
+  mutate(Tweet_text = str_remove_all(Tweet_text, "https://.+|@[^ ]+ ")) %>%
+  # Un-nesting each Word from each Tweet
+  unnest_tokens(word, Tweet_text) %>%
+  group_by(index) %>%
+  # Total Words in a given Tweet
+  mutate(total_words = n(), tweet_word_index = row_number()) %>%
+  # Removing Stopwords
+  filter(!(word %in% stopwords("english")))
+```
+
+```{r etractEmojis}
+tweets_ji <- nike_tweets_raw %>%
+  # Extracting all Emojis from Tweets
+  mutate(emojis = emo::ji_extract_all(Tweet_text)) %>%
+  # Removing all Emojis from Original Text
+  mutate(Tweet_text = ji_replace_all(Tweet_text, "")) %>%
+  # Un-nesting all Emojis in each Tweet
+  unnest_wider(emojis)
+
+## Making Column Names for each Emoji "slot"
+colnames(tweets_ji)[3:28] = c(mapply(function (x) paste0("Emoji_", x), 1:26))
+tweets_ji$index = 1:nrow(tweets_ji)
+```
+
+## Most Commonly used Emojis
+
+```{r mostCommonEmojis}
+## Cleaning Emoji columns (26) into 1
+emoji_df <- tweets_ji %>% 
+  select(index, contains("Emoji")) %>%
+  # Melting emoji columns together to identify total number of appearances
+  melt(id.var = "index", variable.name = 'Emojis') %>%
+  # Filtering out missing values
+  filter(!is.na(value))
+
+## Finding Summary Values for each Emoji
+common_emoji_df <- emoji_df %>%
+  group_by(value) %>%
+  # Calculating total number of appearances
+  mutate(Appearances = n()) %>%
+  distinct(value, index, .keep_all = T) %>%
+  mutate(n = n()) %>%
+  arrange(desc(n)) %>%
+  # Joining on emoji descriptions
+  inner_join(emojis, by = c("value" = "code")) %>%
+  distinct(value, .keep_all = T) %>%
+  # Selecting top 25
+  head(15) %>%
+  select(Emoji = value, description, Tweet_appearances = n, Total_appearances = Appearances)
+
+kable(common_emoji_df) %>%
+  kable_styling(latex_options = "striped", font_size=10) %>%
+  row_spec(c(justodd(1:nrow(common_emoji_df))), background="#F8F8F8")
+```
+
+```{r finalCleanDf}
+## Rejoining Emojis to Un-nested text
+cleaned_nike_tweets_df <- tweets_words %>%
+  # Rejoining Emojis in New Column
+  inner_join(tweets_ji) %>%
+  # Adding Sentiment Column
+  inner_join(nrc_l) %>%
+  # Adding Intensity Column
+  inner_join(afinn) %>%
+  # Combining 
+  unite("Emojis", Emoji_1:Emoji_15, sep=",", na.rm = TRUE) %>%
+  mutate(Emojis = ifelse(Emojis == "", "none", Emojis)) %>%
+  filter(Emojis == "none" | any(common_emoji_df$Emoji %in% Emojis))
+```
+
+## NRC Sentiment
+
+```{r nrc}
+get_sentiments("nrc") %>%
+  distinct(sentiment) %>%
+  mutate(" " = ifelse(sentiment == c("positive", "negative"), "sentiment", "emotion"))
+```
+
+## Comparison Cloud
+
+```{r cloud}
+tweets_words %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(sentiment %in% c("positive", "negative")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  wordcloud::comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 150)
+```
+
+```{r}
+## New 
+
+## Finding Total Words in each Sentiment Category
+emoji_df %>%
+  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
+  inner_join(tweets_words, by = c("index" = "index")) %>%
+  inner_join(nrc_l, by=c("word" = "word")) %>%
+  group_by(sentiment) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+
+## Finding Total Words in each Sentiment Category for each Emoji
+emoji_df %>%
+  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
+  inner_join(tweets_words, by = c("index" = "index")) %>%
+  inner_join(nrc_l, by=c("word" = "word")) %>%
+  group_by(value, sentiment) %>%
+  summarize(n = n(), Tweet_appearances, Total_appearances, description) %>%
+  distinct(value, .keep_all = T) %>%
+  filter(value %in% common_emoji_df$Emoji) %>%
+  ungroup() %>%
+  group_by(value) %>%
+  top_n(1, n) %>%
+  arrange(desc(n)) %>%
+  select(Emoji = value, sentiment, words = n) %>%
+  inner_join(emojis, by =c("Emoji" = "code")) %>%
+  select(-Emoji, Emoji = description, sentiment, words)
+```
+
+## Intensity of Emotions underlying Emojis
+```{r}
+afinn <- get_sentiments("afinn")
+
+neg_afinn <- get_sentiments("afinn") %>%
+  filter(value < 0)
+
+pos_afinn <- get_sentiments("afinn") %>%
+  filter(value > 0)
+
+intense_neg_tweets <- neg_afinn %>%
+  # Joining tweet content words onto "afinn" lexicon data frame
+  inner_join(tweets_words, by = c("word" = "word")) %>%
+  # Joining emojis back onto word content
+  left_join(tweets_ji)
+
+intense_pos_tweets <- pos_afinn %>%
+  # Joining tweet content words onto "afinn" lexicon data frame
+  inner_join(tweets_words, by = c("word" = "word")) %>%
+  # Joining emojis back onto word content
+  left_join(tweets_ji)
+```
+
+```{r}
+## New
+
+## Finding Total Words in each Sentiment Value Level
+emoji_df %>%
+  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
+  inner_join(tweets_words, by = c("index" = "index")) %>%
+  inner_join(afinn, by=c("word" = "word")) %>%
+  group_by(value.y) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n)) %>%
+  select(`Sentiment Intensity Value` = value.y, `Number of Words` = n)
+
+## Finding Total Words in each Sentiment Value Level for each Emoji
+emoji_df %>%
+  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
+  inner_join(tweets_words, by = c("index" = "index")) %>%
+  inner_join(nrc_l, by=c("word" = "word")) %>%
+  group_by(value, sentiment) %>%
+  summarize(n = n(), Tweet_appearances, Total_appearances, description) %>%
+  distinct(value, .keep_all = T) %>%
+  filter(!is.na(description)) %>%
+  arrange(desc(Total_appearances), desc(n)) %>%
+  group_by(value) %>%
+  top_n(1, n)
+
+cleaned_nike_tweets_df %>%
+  ungroup() %>%
+  distinct(Emojis) %>%
+  inner_join(emojis, by = c("Emojis" = "code")) %>%
+  select(Emoji = description)
+```
+
+```{r}
+## Negative afinn values
+intense_neg_df <- intense_neg_tweets %>%
+  select(-Tweet_text) %>%
+  filter(!is.na(Emoji_1)) %>%
+  group_by(index) %>%
+  mutate(n_int_words = n()) %>%
+  ungroup %>%
+  group_by(Emoji_1) %>%
+  summarize (n_int_words = mean(n_int_words), median_value = median(value), total_words = mean(total_words)) %>%
+  ungroup() %>%
+  left_join(emojis, by = c("Emoji_1" = "code")) %>%
+  mutate(prop_int = n_int_words/total_words) %>%
+  arrange(median_value, prop_int, n_int_words) 
+
+intense_neg_df %>%
+  group_by(median_value) %>%
+  summarize(props = mean(prop_int), mtw = mean(n_int_words)) %>%
+  arrange(desc(props), mtw)
+
+## Positive afinn values
+intense_pos_df <- intense_pos_tweets %>%
+  select(-Tweet_text) %>%
+  filter(!is.na(Emoji_1)) %>%
+  group_by(index) %>%
+  mutate(n_int_words = n()) %>%
+  ungroup %>%
+  group_by(Emoji_1) %>%
+  summarize (n_int_words = mean(n_int_words), median_value = median(value), total_words = mean(total_words)) %>%
+  ungroup() %>%
+  left_join(emojis, by = c("Emoji_1" = "code")) %>%
+  mutate(prop_int = n_int_words/total_words) %>%
+  arrange(median_value, prop_int, n_int_words) 
+
+intense_pos_df %>%
+  group_by(median_value) %>%
+  summarize(props = mean(prop_int), mtw = mean(n_int_words)) %>%
+  arrange(desc(props), mtw)
+
+```
+
+```{r nikeNrcAfinnDens}
+afinn_v_nrc <- nrc_l %>%
+   inner_join(afinn, by = c("word" = "word")) %>%
+  group_by(value, sentiment) %>%
+  summarize(count = n()) %>%
+  group_by(sentiment) %>%
+  mutate(mean = mean(value))
+
+## Actual Distribution of Intensity for each Sentiment
+
+afinn_v_nrc %>%
+  ggplot(aes(value, after_stat(count), fill = sentiment)) +
+  geom_density(alpha=0.2, show.legend = F) +
+  geom_vline(aes(xintercept = mean), linetype="dashed") +
+  facet_grid(cols=vars(sentiment)) +
+  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) +
+  theme_clean() +
+  theme(
+    axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  ) + 
+  labs(title = "Intensity of Emotions", x = "Sentiment Intensity Value", y=NULL)
+  
+## Nike's v. Actual Distribution of Intensity for each Sentiment
+tweets_words %>%
+  inner_join(nrc_l, by = c("word" = "word")) %>%
+  inner_join(afinn, by = c("word" = "word")) %>%
+  group_by(value, sentiment) %>%
+  summarize(count = n()) %>%
+  group_by(sentiment) %>%
+  mutate(mean = mean(value)) %>%
+  ggplot(aes(value, after_stat(count), fill = sentiment)) +
+  geom_density(alpha=0.2, show.legend=F, color = "red") +
+  geom_vline(aes(xintercept = mean), linetype="dashed", color="red") +
+  geom_density(data=afinn_v_nrc, alpha=0.2, show.legend=F) + 
+  geom_vline(data=afinn_v_nrc, aes(xintercept = mean), linetype="dashed") +
+  facet_grid(cols=vars(sentiment)) +
+  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
+  theme_clean() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  ) + 
+  labs(title = "Intensity of Emotions", subtitle="Comparing tweets about Nike Shoes to Actual Sentiment Intensity Distributions", x = "Sentiment Intensity Value", y=NULL)
+
+## Nike's (w/ Emojis) v. Actual Distribution of Intensity for each Sentiment
+cleaned_nike_tweets_df %>%
+  filter(Emojis != "none") %>%
+  group_by(value, sentiment) %>%
+  summarize(count = n()) %>%
+  group_by(sentiment) %>%
+  mutate(mean = mean(value)) %>%
+  ggplot(aes(value, after_stat(count), fill = sentiment)) +
+  geom_density(alpha=0.2, show.legend=F, color = "red") +
+  geom_vline(aes(xintercept = mean), linetype="dashed", color="red") +
+  geom_density(data=afinn_v_nrc, alpha=0.2, show.legend=F) + 
+  geom_vline(data=afinn_v_nrc, aes(xintercept = mean), linetype="dashed") +
+  facet_grid(cols=vars(sentiment)) +
+  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
+  theme_clean() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  ) + 
+  labs(title = "Do Tweets with Emojis have Different Intensity?", x = "Sentiment Intensity Value", y=NULL)
+```
+
+```{r}
+all_counts <- cleaned_nike_tweets_df %>%
+  group_by(value) %>%
+  mutate(v_n = n()) %>%
+  ungroup() %>%
+  group_by(sentiment) %>%
+  mutate(s_n = n()) %>%
+  ungroup()
+
+emoji_counts <- cleaned_nike_tweets_df %>%
+  filter(Emojis != 'none') %>%
+  group_by(value) %>%
+  mutate(v_n = n()) %>%
+  ungroup() %>%
+  group_by(sentiment) %>%
+  mutate(s_n = n()) %>%
+  ungroup()
+
+all_counts %>%
+  ggplot(aes(value)) +
+  geom_density(alpha=0.2, show.legend=F, fill="black") +
+  geom_density(data = emoji_counts, alpha=0.2, show.legend=F, fill="red") +
+  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
+  theme_clean() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
+
+cleaned_nike_tweets_df %>%
+  group_by(value) %>%
+  count() %>%
+  ggplot(aes(value, n)) +
+  geom_col(alpha=0.2, show.legend=F) +
+  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
+  theme_clean() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
+
+all_counts %>%
+  ggplot(aes(sentiment, fill = sentiment)) +
+  geom_density(alpha=0.2, show.legend=F) +
+  geom_density(data = emoji_counts, alpha=0.2, show.legend=F, color="red") +
+  theme_clean() +
+  theme(
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  ) +
+  coord_flip()
+
+cleaned_nike_tweets_df %>%
+  filter(Emojis != "none") %>%
+  group_by(sentiment) %>%
+  count()
+```
+
+```{r}
+## Creating features from Sentiment, Intensity Values, and Emotional Word Count
+tweet_words_summary_tbl <- cleaned_nike_tweets_df %>%
+  select(-Tweet_text) %>%
+  # Counting sentiment appearance in each tweet
+  group_by(index,sentiment) %>%
+  mutate(index_sent_count = n()) %>%
+  ungroup() %>%
+  # making a united sentiment column for all conveyed sentiment per word
+  group_by(index, word) %>%
+  mutate(all_sentiment = paste(sentiment, collapse = " | ")) %>%
+  ungroup() %>%
+  # Reducing to remove duplicate words from multiple sentiments
+  group_by(index, word, tweet_word_index) %>%
+  pivot_wider(names_from = sentiment, values_from = index_sent_count) %>%
+  ungroup() %>%
+  group_by(index, value) %>%
+  mutate(index_val_count = n()) %>%
+  ungroup() %>%
+  group_by(index, word, tweet_word_index) %>%
+  pivot_wider(names_prefix = "Value", names_from = value, values_from = index_val_count, values_fill = 0) %>%
+  ungroup() %>%
+  group_by(index) %>%
+  mutate(total_sentval_words = n()) %>%
+  mutate_all(function(x) ifelse(is.na(x), 0, x))
+
+## Creating Additional Features 
+tweet_sum_tbl <- tweet_words_summary_tbl %>%
+  select(-word, -tweet_word_index) %>%
+  group_by(index) %>%
+  summarize_all(function(x) max(x)) %>%
+  select(-index, -all_sentiment) %>%
+  mutate(
+    avg_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_words,
+    avg_int_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_sentval_words,
+    prop_sentval_words = total_sentval_words/total_words
+    ) %>%
+  inner_join(emojis, by = c("Emojis" =  "code")) %>%
+  select(-Emojis)
+```
+
+``` {r, show_col_types = FALSE}
+tweets_words_2 <- nike_tweets_raw_em %>%
+  # Removing Hyperlinks and Account Handles
+  mutate(Tweet_text = str_remove_all(Tweet_text, "https://.+|@[^ ]+ ")) %>%
+  # Un-nesting each Word from each Tweet
+  unnest_tokens(word, Tweet_text) %>%
+  group_by(index) %>%
+  # Total Words in a given Tweet
+  mutate(total_words = n(), tweet_word_index = row_number()) %>%
+  # Removing Stopwords
+  filter(!(word %in% stopwords("english")))
+
+tweets_ji_2 <- nike_tweets_raw_em %>%
+  # Extracting all Emojis from Tweets
+  mutate(emojis = emo::ji_extract_all(Tweet_text)) %>%
+  # Removing all Emojis from Original Text
+  mutate(Tweet_text = ji_replace_all(Tweet_text, "")) %>%
+  # Un-nesting all Emojis in each Tweet
+  unnest_wider(emojis)
+
+## Making Column Names for each Emoji "slot"
+colnames(tweets_ji_2)[3:28] = c(mapply(function (x) paste0("Emoji_", x), 1:26))
+tweets_ji_2$index = 1:nrow(tweets_ji_2)
+
+## Rejoining Emojis to Un-nested text
+cleaned_nike_tweets_df_2 <- tweets_words_2%>%
+  # Rejoining Emojis in New Column
+  inner_join(tweets_ji_2) %>%
+  # Adding Sentiment Column
+  inner_join(nrc_l) %>%
+  # Adding Intensity Column
+  inner_join(afinn) %>%
+  unite("Emojis", Emoji_1:Emoji_15, sep=",", na.rm = TRUE) %>%
+  mutate(Emojis = ifelse(Emojis == "", "none", Emojis)) %>%
+  filter(Emojis %in% unique(common_emoji_df$Emoji))
+
+tweet_words_summary_tbl_2 <- cleaned_nike_tweets_df_2 %>%
+  select(-Tweet_text) %>%
+  # Counting sentiment appearance in each tweet
+  group_by(index,sentiment) %>%
+  mutate(index_sent_count = n()) %>%
+  ungroup() %>%
+  # making a united sentiment column for all conveyed sentiment per word
+  group_by(index, word) %>%
+  mutate(all_sentiment = paste(sentiment, collapse = " | ")) %>%
+  ungroup() %>%
+  # Reducing to remove duplicate words from multiple sentiments
+  group_by(index, word, tweet_word_index) %>%
+  pivot_wider(names_from = sentiment, values_from = index_sent_count) %>%
+  ungroup() %>%
+  group_by(index, value) %>%
+  mutate(index_val_count = n()) %>%
+  ungroup() %>%
+  group_by(index, word, tweet_word_index) %>%
+  pivot_wider(names_prefix = "Value", names_from = value, values_from = index_val_count, values_fill = 0) %>%
+  ungroup() %>%
+  group_by(index) %>%
+  mutate(total_sentval_words = n()) %>%
+  mutate_all(function(x) ifelse(is.na(x), 0, x))
+
+tweet_sum_tbl_2 <- tweet_words_summary_tbl_2 %>%
+  select(-word, -tweet_word_index) %>%
+  group_by(index) %>%
+  summarize_all(function(x) max(x)) %>%
+  select(-index, -all_sentiment) %>%
+  mutate(
+    avg_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_words,
+    avg_int_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_sentval_words,
+    prop_sentval_words = total_sentval_words/total_words
+    ) %>%
+  inner_join(emojis, by = c("Emojis" =  "code")) %>%
+  select(-Emojis)
+```
+
+## Model
+
+```{r firstmodel}
+colnames(tweet_sum_tbl_2) <- make.names(colnames(tweet_sum_tbl_2))
+
+set.seed(2048)
+cb_index <- createDataPartition(tweet_sum_tbl_2$description, p = 0.70, list = FALSE)
+train <- tweet_sum_tbl_2[cb_index, ]
+test <- tweet_sum_tbl_2[-cb_index, ]
+
+set.seed(2048)
+fit <- train(description~.,
+      data=train,
+      method="rpart"
+)
+
+rpart.plot::rpart.plot(fit$finalModel, box.palette="blue")
+
+preds <- predict(fit, train, type="raw")
+
+preds <- as.data.frame(preds) %>%
+  mutate(preds = as.factor(preds))
+
+confusionMatrix(preds$preds, as.factor(train$description))
+
+varImp(fit$finalModel)
+
+## Test
+
+preds <- predict(fit, test, type="raw")
+
+preds <- as.data.frame(preds) %>%
+  mutate(preds = as.factor(preds))
+
+confusionMatrix(as.factor(preds$preds), as.factor(test$description))
+```
+
+```{r testModel}
+colnames(tweet_sum_tbl) <- make.names(colnames(tweet_sum_tbl))
+
+preds <- predict(fit, tweet_sum_tbl, type="raw")
+
+preds <- as.data.frame(preds) %>%
+  mutate(preds = as.factor(preds))
+
+tibble(actual = tweet_sum_tbl$description, pred = preds$preds) %>%
+  filter(actual != "none") %>%
+  mutate(true = ifelse(actual %in% pred, TRUE, FALSE)) %>%
+  summarize(accuracy = mean(true))
+
+confusionMatrix(as.factor(preds$preds), as.factor(tweet_sum_tbl$description))
+```
+
+```{r}
+knitr::kable(tweet_sum_tbl %>%
+  group_by(description) %>%
+  summarize_all(function(x) mean(x)) %>%
+  ungroup() %>%
+  mutate_if(is.numeric, function(x) x - max(x, na.rm=T)))
+```
