@@ -3,6 +3,16 @@ title: "Emojilytics: Nike"
 date: '2022-08-01T6:00:00-07:00'
 ---
 
+```{css styles, echo=FALSE}
+body{
+  font-size: 10pt;
+}
+h1, h2, h3, h4 {
+  text-align: center;
+  font-weight: bold;
+}
+```
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = FALSE, 
