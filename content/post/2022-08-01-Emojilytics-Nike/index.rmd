@@ -46,9 +46,7 @@ TableHeader <- function(x) str_c("<center><strong>",x,"</strong></center>")
 justodd <- function(x) x[ x %% 2 == 1 ]
 ```
 
-## Data
-
-The data I'm going to be looking at are tweets that will be retrieved through the Twitter API. This data is going to contain content such as descriptive content (words, sentences), emoji characters, hyperlinks, account handles, etc. Therefore given the nature of this data there is going to be a need for cleaning in order to separate the descriptive content from within each tweet. The major limitation of this data is its retrieval method because the tweets I get are completely determined by the query I construct and insufficient filter parameters will effect the tweets I receive. To analyze emoji usage I will be conducting an emotional text analysis utilizing the nrc lexicon of tidytext to classify emojis according to emotion category. 
+The data I'm going to be looking at are tweets about Nike and/or its products that will be retrieved through the Twitter API. This data is going to contain text, Emoji characters, hyperlinks, account handles, etc. Therefore given the nature of this data there is going to be a lot of cleaning in order to separate the descriptive content out from each tweet. To analyze Emoji usage I will be conducting an emotional text analysis utilizing the NRC and AFINN lexicon of tidytext to classify Emojis according to emotion category. The NRC lexicon is a database containing the emotional (joy, sadness, etc.) or sentiment (positive or negative) for over 6,000 words. Further, AFINN is a database containing the sentiment intensity value of almost 3,000 words.
 
 ```{r data}
 ## Loading in datasets
@@ -58,7 +56,6 @@ nike_tweets_raw_em <- read_csv("niketweetyemojis.csv")
 ## Index for tweet dataset
 nike_tweets_raw$index = 1:nrow(nike_tweets_raw)
 nike_tweets_raw_em$index = 1:nrow(nike_tweets_raw_em)
-
 ```
 
 ```{r lexicon} 
@@ -74,7 +71,7 @@ profanities <- tibble(word = c(profanity_alvarez,profanity_arr_bad, profanity_ba
 
 ## Data Cleaning
 
-First, the data requires some cleaning of the tweet text content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional lexicon.
+First, the data requires some cleaning of content such as filtering out account handles, hyperlinks, and emojis. Then, the string of content must be broken up into the various words to then compare it to the emotional and intensity lexicon.
 
 ``` {r}
 tweets_words <- nike_tweets_raw %>%
@@ -109,7 +106,7 @@ tweets_ji$index = 1:nrow(tweets_ji)
 ## Cleaning Emoji columns (26) into 1
 emoji_df <- tweets_ji %>% 
   select(index, contains("Emoji")) %>%
-  # Melting emoji columns together to identify total number of appearances
+  # Melting Emoji columns together to identify total number of appearances
   melt(id.var = "index", variable.name = 'Emojis') %>%
   # Filtering out missing values
   filter(!is.na(value))
@@ -127,12 +124,18 @@ common_emoji_df <- emoji_df %>%
   distinct(value, .keep_all = T) %>%
   # Selecting top 25
   head(15) %>%
-  select(Emoji = value, description, Tweet_appearances = n, Total_appearances = Appearances)
+  select(Emoji = value, Tweet_appearances = n, Total_appearances = Appearances)
 
-kable(common_emoji_df) %>%
-  kable_styling(latex_options = "striped", font_size=10) %>%
+kable(
+  common_emoji_df %>%
+    select(Emoji, `Tweets` = Tweet_appearances, `Total Appearances` = Total_appearances),
+  caption = TableHeader("Total Appearances of Top 15 Emojis")
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
   row_spec(c(justodd(1:nrow(common_emoji_df))), background="#F8F8F8")
 ```
+
+The 15 most common Emojis used in these tweets are included above. The most common being the fire Emoji appearing in over 200 tweets and in total almost 400 occurrences. With over 322 Emojis are seen to be used in total a large majority of these appear very few times and this can even be seen in this list with those lower on the table only appearing in less than 50 tweets out of the 1,600 with Emojis. Therefore while a majority of Emojis seem to be used in either very specific instances, or by an individual user, there do seem to be a couple which may show a significant relationship to tweet makeup (total words, emotional content, etc.).
 
 ```{r finalCleanDf}
 ## Rejoining Emojis to Un-nested text
@@ -149,152 +152,105 @@ cleaned_nike_tweets_df <- tweets_words %>%
   filter(Emojis == "none" | any(common_emoji_df$Emoji %in% Emojis))
 ```
 
-## NRC Sentiment
-
-```{r nrc}
-get_sentiments("nrc") %>%
-  distinct(sentiment) %>%
-  mutate(" " = ifelse(sentiment == c("positive", "negative"), "sentiment", "emotion"))
-```
-
-## Comparison Cloud
+## The Emotions Seen in Tweets about Nike
 
 ```{r cloud}
 tweets_words %>%
-  inner_join(get_sentiments("nrc")) %>%
-  filter(sentiment %in% c("positive", "negative")) %>%
+  inner_join(nrc_l) %>%
+  anti_join(profanities) %>%
+  filter(sentiment %in% c("positive", "negative") & !(word %in% c("leader", "green", "fall", "force", "wear", "basketball", "hunter", "government"))) %>%
   count(word, sentiment, sort = TRUE) %>%
   acast(word ~ sentiment, value.var = "n", fill = 0) %>%
   wordcloud::comparison.cloud(colors = c("gray20", "gray80"),
-                   max.words = 150)
+                   max.words = 100)
 ```
 
-```{r}
-## New 
+I wanted to compare the top 100 positive and negative words in order get a sense of which sentiment was the predominant one in tweets about Nike. I used a wordcloud so that it would display the top 100 words according to category with the size of the word being determined by its number of occurrences. With the number of words being equal for both sentiment this displays that the sentiment overall of these tweets is neutral. While as is the nature with brand companies I did not expect for the sentiment even in a snippet of time to be as mixed as this wordcloud shows. I wondered if the sentiment use case of Emojis was as mixed or if users utilized these characters more to express one specific emotion or sentiment.
 
-## Finding Total Words in each Sentiment Category
-emoji_df %>%
-  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
-  inner_join(tweets_words, by = c("index" = "index")) %>%
-  inner_join(nrc_l, by=c("word" = "word")) %>%
+```{r sentsValCounts}
+emoji_counts <- cleaned_nike_tweets_df %>%
+  ungroup() %>%
+  filter(Emojis != 'none') %>%
+  group_by(value) %>%
+  mutate(v_n = n()) %>%
+  ungroup() %>%
+  group_by(sentiment) %>%
+  mutate(s_n = n()) %>%
+  ungroup()
+```
+
+### Sentiment Underlying Tweets with Emojis
+
+```{r}
+emoji_counts %>%
+  distinct(sentiment, .keep_all=T) %>%
+  mutate(v_n = v_n/sum(v_n), s_n = s_n/sum(s_n)) %>%
+  ggplot(aes(sentiment, s_n, fill = sentiment)) +
+  geom_col(alpha=0.2, show.legend=F) +
+  theme_clean() +
+  theme(
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    plot.background = element_rect(color="#FFFFFF")
+  ) +
+  scale_y_continuous(labels = label_percent()) +
+  labs(x = NULL, y=NULL)
+
+sent_ems_tbl <- cleaned_nike_tweets_df %>%
   group_by(sentiment) %>%
   summarize(n = n()) %>%
-  arrange(desc(n))
+  mutate(n = n/sum(n)) %>%
+  select(Sentiment = sentiment, `Proportion of Words` = n) %>%
+  arrange(desc(`Proportion of Words`)) %>%
+  mutate(`Proportion of Words` = percent(`Proportion of Words`))
 
-## Finding Total Words in each Sentiment Category for each Emoji
-emoji_df %>%
-  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
-  inner_join(tweets_words, by = c("index" = "index")) %>%
-  inner_join(nrc_l, by=c("word" = "word")) %>%
-  group_by(value, sentiment) %>%
-  summarize(n = n(), Tweet_appearances, Total_appearances, description) %>%
-  distinct(value, .keep_all = T) %>%
-  filter(value %in% common_emoji_df$Emoji) %>%
-  ungroup() %>%
-  group_by(value) %>%
-  top_n(1, n) %>%
-  arrange(desc(n)) %>%
-  select(Emoji = value, sentiment, words = n) %>%
-  inner_join(emojis, by =c("Emoji" = "code")) %>%
-  select(-Emoji, Emoji = description, sentiment, words)
+kable(
+  sent_ems_tbl,
+  caption = TableHeader("Word Sentiment Breakdown of Tweets with Emojis"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(sent_ems_tbl))), background="#F8F8F8")
 ```
 
-## Intensity of Emotions underlying Emojis
-```{r}
-afinn <- get_sentiments("afinn")
+Focusing on the top 15 Emojis which were found earlier I found the proportion of words for each sentiment, and emotion, that appeared in tweets that contained these Emojis. The sentiment of these tweets was mostly positive, with 19% of words being of positive sentiment. Followed closely be negative sentiment which accounted for 13% of words. With the two highest emotions in the table (trust, joy) being positive this lends me to believe that there is correlation between Emoji usage and positive sentiment for tweets about Nike. Further, Therefore to attempt to control for this overlap and see if there is a difference in the use of Emojis in positive and negative sentiment the next step was to look at both sentiment and emotional intensity.
 
-neg_afinn <- get_sentiments("afinn") %>%
-  filter(value < 0)
-
-pos_afinn <- get_sentiments("afinn") %>%
-  filter(value > 0)
-
-intense_neg_tweets <- neg_afinn %>%
-  # Joining tweet content words onto "afinn" lexicon data frame
-  inner_join(tweets_words, by = c("word" = "word")) %>%
-  # Joining emojis back onto word content
-  left_join(tweets_ji)
-
-intense_pos_tweets <- pos_afinn %>%
-  # Joining tweet content words onto "afinn" lexicon data frame
-  inner_join(tweets_words, by = c("word" = "word")) %>%
-  # Joining emojis back onto word content
-  left_join(tweets_ji)
-```
+### Intensity of Emotions underlying Emojis
 
 ```{r}
-## New
+emoji_counts %>%
+  ggplot(aes(value)) +
+  geom_density(alpha=0.2, show.legend=F, fill="blue") +
+  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
+  theme_clean() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    plot.background = element_rect(color="#FFFFFF"),
+    panel.grid.major.y = element_blank()
+  ) +
+  labs(x = "Intensity Value", y=NULL)
 
 ## Finding Total Words in each Sentiment Value Level
-emoji_df %>%
-  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
-  inner_join(tweets_words, by = c("index" = "index")) %>%
-  inner_join(afinn, by=c("word" = "word")) %>%
-  group_by(value.y) %>%
+val_em_tbl <- cleaned_nike_tweets_df %>%
+  group_by(value) %>%
   summarize(n = n()) %>%
   arrange(desc(n)) %>%
-  select(`Sentiment Intensity Value` = value.y, `Number of Words` = n)
-
-## Finding Total Words in each Sentiment Value Level for each Emoji
-emoji_df %>%
-  inner_join(common_emoji_df, by = c("value" = "Emoji")) %>%
-  inner_join(tweets_words, by = c("index" = "index")) %>%
-  inner_join(nrc_l, by=c("word" = "word")) %>%
-  group_by(value, sentiment) %>%
-  summarize(n = n(), Tweet_appearances, Total_appearances, description) %>%
-  distinct(value, .keep_all = T) %>%
-  filter(!is.na(description)) %>%
-  arrange(desc(Total_appearances), desc(n)) %>%
-  group_by(value) %>%
-  top_n(1, n)
-
-cleaned_nike_tweets_df %>%
   ungroup() %>%
-  distinct(Emojis) %>%
-  inner_join(emojis, by = c("Emojis" = "code")) %>%
-  select(Emoji = description)
+  mutate(n = percent(n/sum(n))) %>%
+  select(`Sentiment Intensity Value` = value, `Number of Words` = n)
+
+kable(
+  val_em_tbl,
+  caption = TableHeader("Word Intensity Breakdown of Tweets with Emojis"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(val_em_tbl))), background="#F8F8F8")
+
 ```
 
-```{r}
-## Negative afinn values
-intense_neg_df <- intense_neg_tweets %>%
-  select(-Tweet_text) %>%
-  filter(!is.na(Emoji_1)) %>%
-  group_by(index) %>%
-  mutate(n_int_words = n()) %>%
-  ungroup %>%
-  group_by(Emoji_1) %>%
-  summarize (n_int_words = mean(n_int_words), median_value = median(value), total_words = mean(total_words)) %>%
-  ungroup() %>%
-  left_join(emojis, by = c("Emoji_1" = "code")) %>%
-  mutate(prop_int = n_int_words/total_words) %>%
-  arrange(median_value, prop_int, n_int_words) 
-
-intense_neg_df %>%
-  group_by(median_value) %>%
-  summarize(props = mean(prop_int), mtw = mean(n_int_words)) %>%
-  arrange(desc(props), mtw)
-
-## Positive afinn values
-intense_pos_df <- intense_pos_tweets %>%
-  select(-Tweet_text) %>%
-  filter(!is.na(Emoji_1)) %>%
-  group_by(index) %>%
-  mutate(n_int_words = n()) %>%
-  ungroup %>%
-  group_by(Emoji_1) %>%
-  summarize (n_int_words = mean(n_int_words), median_value = median(value), total_words = mean(total_words)) %>%
-  ungroup() %>%
-  left_join(emojis, by = c("Emoji_1" = "code")) %>%
-  mutate(prop_int = n_int_words/total_words) %>%
-  arrange(median_value, prop_int, n_int_words) 
-
-intense_pos_df %>%
-  group_by(median_value) %>%
-  summarize(props = mean(prop_int), mtw = mean(n_int_words)) %>%
-  arrange(desc(props), mtw)
-
-```
+Looking now at the breakdown of word intensity this also displays a correlation between Emoji use and positive sentiment. In the table above over 59% of words falling on the positive (sentiment) end of this intensity scale, with both of the top two levels (2, 3) being positive. But although to a lesser extent there is also a significant proportion of high intensity negative words, 28%, which displays a potential correlation of Emoji use also with high intensity negative words. To see which emotions the majority of these high intensity words are related to I constructed the density plots below to compare across the various sentiments.
 
 ```{r nikeNrcAfinnDens}
 afinn_v_nrc <- nrc_l %>%
@@ -316,33 +272,16 @@ afinn_v_nrc %>%
   theme(
     axis.text.y = element_blank(), 
     axis.ticks.y = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(color="#FFFFFF"),
     panel.grid.major.y = element_blank()
   ) + 
   labs(title = "Intensity of Emotions", x = "Sentiment Intensity Value", y=NULL)
-  
-## Nike's v. Actual Distribution of Intensity for each Sentiment
-tweets_words %>%
-  inner_join(nrc_l, by = c("word" = "word")) %>%
-  inner_join(afinn, by = c("word" = "word")) %>%
-  group_by(value, sentiment) %>%
-  summarize(count = n()) %>%
-  group_by(sentiment) %>%
-  mutate(mean = mean(value)) %>%
-  ggplot(aes(value, after_stat(count), fill = sentiment)) +
-  geom_density(alpha=0.2, show.legend=F, color = "red") +
-  geom_vline(aes(xintercept = mean), linetype="dashed", color="red") +
-  geom_density(data=afinn_v_nrc, alpha=0.2, show.legend=F) + 
-  geom_vline(data=afinn_v_nrc, aes(xintercept = mean), linetype="dashed") +
-  facet_grid(cols=vars(sentiment)) +
-  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
-  theme_clean() +
-  theme(
-    axis.text.y = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.major.y = element_blank()
-  ) + 
-  labs(title = "Intensity of Emotions", subtitle="Comparing tweets about Nike Shoes to Actual Sentiment Intensity Distributions", x = "Sentiment Intensity Value", y=NULL)
+```
 
+This first density plot, above, displays the general distribution of emotional intensity for all sentiment over the entire NRC and AFINN lexicon. Sentiment and emotions which fall on the positive end of this scale include positive sentiment, joy, and trust. Negative sentiment, anger, sadness, fear, and disgust fall on the negative end, and anticipation as well as surprise are neutral with means of zero intensity. These distributions will be compared to those of our tweets with Emojis to show if intensity differs from average.  
+
+```{r}
 ## Nike's (w/ Emojis) v. Actual Distribution of Intensity for each Sentiment
 cleaned_nike_tweets_df %>%
   filter(Emojis != "none") %>%
@@ -361,70 +300,18 @@ cleaned_nike_tweets_df %>%
   theme(
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(color="#FFFFFF"),
     panel.grid.major.y = element_blank()
   ) + 
   labs(title = "Do Tweets with Emojis have Different Intensity?", x = "Sentiment Intensity Value", y=NULL)
 ```
 
-```{r}
-all_counts <- cleaned_nike_tweets_df %>%
-  group_by(value) %>%
-  mutate(v_n = n()) %>%
-  ungroup() %>%
-  group_by(sentiment) %>%
-  mutate(s_n = n()) %>%
-  ungroup()
+Looking at the tweets it appears that the words used for almost all emotion and sentiment were significantly higher in intensity than average. Surprisingly for a brand such as Nike positive words had intensity no different than average, which I would believe would be above this level since the journey of advertising and purchase for Nike products involves a lot of hype for seasonal and limited product releases. But, not surprising in this figure are the significantly higher averages for anticipation and surprise which do align with the hype expected to effect the positive sentiment toward Nike.  
 
-emoji_counts <- cleaned_nike_tweets_df %>%
-  filter(Emojis != 'none') %>%
-  group_by(value) %>%
-  mutate(v_n = n()) %>%
-  ungroup() %>%
-  group_by(sentiment) %>%
-  mutate(s_n = n()) %>%
-  ungroup()
+## Decision Tree Model
 
-all_counts %>%
-  ggplot(aes(value)) +
-  geom_density(alpha=0.2, show.legend=F, fill="black") +
-  geom_density(data = emoji_counts, alpha=0.2, show.legend=F, fill="red") +
-  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
-  theme_clean() +
-  theme(
-    axis.text.y = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.major.y = element_blank()
-  )
-
-cleaned_nike_tweets_df %>%
-  group_by(value) %>%
-  count() %>%
-  ggplot(aes(value, n)) +
-  geom_col(alpha=0.2, show.legend=F) +
-  scale_x_continuous(breaks=c(-4, -2, 0, 2, 4)) + 
-  theme_clean() +
-  theme(
-    axis.text.y = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.major.y = element_blank()
-  )
-
-all_counts %>%
-  ggplot(aes(sentiment, fill = sentiment)) +
-  geom_density(alpha=0.2, show.legend=F) +
-  geom_density(data = emoji_counts, alpha=0.2, show.legend=F, color="red") +
-  theme_clean() +
-  theme(
-    axis.ticks.y = element_blank(),
-    panel.grid.major.y = element_blank()
-  ) +
-  coord_flip()
-
-cleaned_nike_tweets_df %>%
-  filter(Emojis != "none") %>%
-  group_by(sentiment) %>%
-  count()
-```
+To determine if significant relationships between Emojis and features of tweets, such as sentiment makeup, total word count, and total words count of words with sentiment and emotional intensity, I constructed a machine learning model. Because the predicted value, Emoji, is a "class" and not a numeric value I chose a decision tree since the relationship between tweet feature and Emoji is most likely non-linear.
 
 ```{r}
 ## Creating features from Sentiment, Intensity Values, and Emotional Word Count
@@ -463,11 +350,10 @@ tweet_sum_tbl <- tweet_words_summary_tbl %>%
     avg_int_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_sentval_words,
     prop_sentval_words = total_sentval_words/total_words
     ) %>%
-  inner_join(emojis, by = c("Emojis" =  "code")) %>%
-  select(-Emojis)
+  filter(Emojis != "none")
 ```
 
-``` {r, show_col_types = FALSE}
+``` {r cleaning }
 tweets_words_2 <- nike_tweets_raw_em %>%
   # Removing Hyperlinks and Account Handles
   mutate(Tweet_text = str_remove_all(Tweet_text, "https://.+|@[^ ]+ ")) %>%
@@ -536,68 +422,199 @@ tweet_sum_tbl_2 <- tweet_words_summary_tbl_2 %>%
     avg_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_words,
     avg_int_value = (`Value2`*2 + `Value3`*3 + `Value-2`*-2 + `Value1` - `Value-1` + `Value4`*4 + `Value-4`*-4 + `Value-3`*-3)/total_sentval_words,
     prop_sentval_words = total_sentval_words/total_words
-    ) %>%
-  inner_join(emojis, by = c("Emojis" =  "code")) %>%
-  select(-Emojis)
+    )
 ```
 
-## Model
-
-```{r firstmodel}
+```{r model}
 colnames(tweet_sum_tbl_2) <- make.names(colnames(tweet_sum_tbl_2))
 
 set.seed(2048)
-cb_index <- createDataPartition(tweet_sum_tbl_2$description, p = 0.70, list = FALSE)
+cb_index <- createDataPartition(tweet_sum_tbl_2$Emojis, p = 0.70, list = FALSE)
 train <- tweet_sum_tbl_2[cb_index, ]
 test <- tweet_sum_tbl_2[-cb_index, ]
 
 set.seed(2048)
-fit <- train(description~.,
+fit <- train(Emojis~.,
       data=train,
       method="rpart"
 )
 
-rpart.plot::rpart.plot(fit$finalModel, box.palette="blue")
+train_plot <- train %>%
+  inner_join(emojis, by =c("Emojis" = "code")) %>%
+  select(-Emojis)
+
+set.seed(2048)
+fit_plot <- train(description~.,
+      data=train_plot,
+      method="rpart"
+)
+
+rpart.plot(fit_plot$finalModel, box.palette="Blues")
+```
+
+Looking at the plotted decision tree from the model above the significant decision features that have been chosen are total words, average word intensity value, and positive sentiment count. Reading this tree it paints a picture of what kind of tweets this model suggests to be associated with each Emoji. Two Emojis appear to be "story-telling" characters because they are directly associated with higher numbers of words in a tweet. The laughing emoji being predicted when a tweet has 35 or greater words and the police car lights when total words are less than 35 but greater than 21 and average word intensity is less than 0.18. From these it seems like the laughing emoji is most generally used in longer posts, telling stories or a long review, and the police car lights when the users' tweets are somewhat shorter but have either neutral or negative intensity words. Also it seems that both the fire and eyes emojis are associated with tweets with higher positive intensity overall and high number of positive words respectively. Now that these relationships have been established the performance of the model will determine whether or not these relationships are significant.
+
+```{r}
+## Predicting on Training Set
 
 preds <- predict(fit, train, type="raw")
 
 preds <- as.data.frame(preds) %>%
   mutate(preds = as.factor(preds))
 
-confusionMatrix(preds$preds, as.factor(train$description))
+m <- confusionMatrix(as.factor(preds$preds), as.factor(train$Emojis))
+```
 
-varImp(fit$finalModel)
+```{r trainStats}
+model_stats_train_tbl <- as.data.frame(m$overall) %>%
+  rownames_to_column("Model Statistic") %>%
+  select(`Model Statistic`, Value = `m$overall`)
 
-## Test
+kable(
+  model_stats_train_tbl,
+  caption = TableHeader("Model Statistics: In-sample"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(model_stats_train_tbl))), background="#F8F8F8")
 
+pred_em_train_tbl <- as.data.frame(m$byClass) %>%
+  rownames_to_column("Emoji") %>%
+  mutate(Emoji = str_remove(Emoji, "Class: ")) %>%
+  arrange(desc(`Balanced Accuracy`)) %>%
+  mutate_if(is.numeric, function(x) percent(x)) %>%
+  select(Emoji, Sensitivity, Specificity, `Balanced Accuracy`)
+
+
+kable(
+  pred_em_train_tbl,
+  caption = TableHeader("Prediction of Top Emojis: In-sample")
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(pred_em_train_tbl))), background="#F8F8F8")
+```
+
+Predicting the model on the in-sample data the model performs significantly higher than random chance with it predicting Emojis correctly overall 73% of the time and performing better than random chance by 67% (Kappa). Looking at the performance on the various Emojis the model seems to only predict five of the remaining 8 of the top 15 Emojis: eyes, police car light, laughing face, crying face, and fire Emojis. But, of those five the lowest balanced accuracy was over 85% which suggests that these Emojis have significant relationships to certain tweet features. To test this model I predicted it on the out-of-sample data.
+
+```{r testPreds}
+## Predicting on Test set
 preds <- predict(fit, test, type="raw")
 
 preds <- as.data.frame(preds) %>%
   mutate(preds = as.factor(preds))
 
-confusionMatrix(as.factor(preds$preds), as.factor(test$description))
+m <- confusionMatrix(as.factor(preds$preds), as.factor(test$Emojis))
 ```
 
-```{r testModel}
+```{r testStats}
+model_stats_test_tbl <- as.data.frame(m$overall) %>%
+  rownames_to_column("Model Statistic") %>%
+  select(`Model Statistic`, Value = `m$overall`)
+
+kable(
+  model_stats_test_tbl,
+  caption = TableHeader("Model Statistics: Out-of-sample"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(model_stats_test_tbl))), background="#F8F8F8")
+
+pred_em_test_tbl <- as.data.frame(m$byClass) %>%
+  rownames_to_column("Emoji") %>%
+  mutate(Emoji = str_remove(Emoji, "Class: ")) %>%
+  arrange(desc(`Balanced Accuracy`)) %>%
+  mutate_if(is.numeric, function(x) percent(x)) %>%
+  select(Emoji, Sensitivity, Specificity, `Balanced Accuracy`)
+
+
+kable(
+  pred_em_test_tbl,
+  caption = TableHeader("Prediction of Top Emojis: Out-of-sample"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(pred_em_test_tbl))), background="#F8F8F8")
+```
+
+The model performed even better on the out-of-sample data, predicting the Emojis of these tweets correctly almost 76% of the time and an increased Kappa to 69%. Again the model predicted the same five Emojis significantly well but failed to predict the other three.
+
+```{r varImp}
+varImp_tbl <- varImp(fit$finalModel) %>%
+  arrange(desc(Overall)) %>%
+  rownames_to_column("Features")
+
+kable(
+  varImp_tbl,
+  caption = TableHeader("Feature Importance"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(varImp_tbl))), background="#F8F8F8")
+```
+
+There are 7 features which held importance within this model: average total word and sentiment word intensities, negative and positive sentiment word count, total words, as well as the number of words with intensity values of 1 or 2. Surprising to me none of the emotion features had any significance in the model and I believe that is due to the fact that a majority of words carry multiple emotional connotations and therefore it causes for the overlap to make these variables insignificant. But since these features hold importance then they must be associated with specific Emoji(s).
+
+```{r emojiMajBD}
+imp_vars <- varImp_tbl %>%
+  filter(Overall > 0) %>%
+  select(Features) %>%
+  pull()
+
+final_sum_tbl <- tweet_sum_tbl_2[, colnames(tweet_sum_tbl_2) == "Emojis" | colnames(tweet_sum_tbl_2) %in% imp_vars] %>%
+  group_by(Emojis) %>%
+  summarize_all(function(x) mean(x)) %>%
+  ungroup() %>%
+  mutate_if(is.numeric, function(x) x - max(x, na.rm=T))
+
+kable(final_sum_tbl,
+      caption = TableHeader("Difference of Tweets for each Emoji")) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(final_sum_tbl))), background="#F8F8F8")
+```
+
+The table I have constructed above depicts the difference of each Emojis average value from the max value within each column, a value of zero signifying that the given Emoji(s) is the highest value. The most significant findings here are that the fire Emoji has the highest average proportion of words holding emotional sentiment and/or intensity, which would be expected since a large number of users utilize this Emoji to express strong positive emotion. This also being confirmed by this Emoji also being tied for having the lowest proportion of negative sentiment words on average. Further, another surprising finding is that while not predicted in the model the heart eyes face Emoji shows the highest average number of positive words and average word intensity value making this Emoji be connected with high intensity positive sentiment. This relationship may be significant and not predicted well in the model because its use was much lower than the Emojis that wer predicted in the model so more research should be done to confirm if this relationship does exist.
+
+After running this model and testing it I wanted to see how it would perform on a fresh set of tweets which were pulled a month after the original set. 
+
+```{r freshModel}
 colnames(tweet_sum_tbl) <- make.names(colnames(tweet_sum_tbl))
 
 preds <- predict(fit, tweet_sum_tbl, type="raw")
 
 preds <- as.data.frame(preds) %>%
   mutate(preds = as.factor(preds))
-
-tibble(actual = tweet_sum_tbl$description, pred = preds$preds) %>%
-  filter(actual != "none") %>%
-  mutate(true = ifelse(actual %in% pred, TRUE, FALSE)) %>%
-  summarize(accuracy = mean(true))
-
-confusionMatrix(as.factor(preds$preds), as.factor(tweet_sum_tbl$description))
 ```
 
 ```{r}
-knitr::kable(tweet_sum_tbl %>%
-  group_by(description) %>%
-  summarize_all(function(x) mean(x)) %>%
-  ungroup() %>%
-  mutate_if(is.numeric, function(x) x - max(x, na.rm=T)))
+m <- confusionMatrix(as.factor(preds$preds), as.factor(tweet_sum_tbl$Emojis))
+
+model_stats_tbl <- as.data.frame(m$overall) %>%
+  rownames_to_column("Model Statistic") %>%
+  select(`Model Statistic`, Value = `m$overall`)
+
+kable(
+  model_stats_tbl,
+  caption = TableHeader("Model Statistics: Fresh Tweets"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(model_stats_tbl))), background="#F8F8F8")
+
+pred_em_tbl <- as.data.frame(m$byClass) %>%
+  rownames_to_column("Emoji") %>%
+  mutate(Emoji = str_remove(Emoji, "Class: ")) %>%
+  arrange(desc(`Balanced Accuracy`)) %>%
+  mutate_if(is.numeric, function(x) percent(x)) %>%
+  select(Emoji, Sensitivity, Specificity, `Balanced Accuracy`)
+
+
+kable(
+  pred_em_tbl,
+  caption = TableHeader("Prediction of Top Emojis: Fresh Tweets"),
+  align = rep("c", 2)
+  ) %>%
+  kable_styling(latex_options = "striped", font_size=16) %>%
+  row_spec(c(justodd(1:nrow(pred_em_tbl))), background="#F8F8F8")
 ```
+
+Overall the same trend of predicting the same five of the eight Emojis remained the same but the accuracy and Kappa values of the model performance dropped significantly, only predicting 31% correctly and performing better than random chance by only 18%. This much lower performance is due to the quickly changing use habits of user and Emojis over time. Therefore since user habits are changing constantly to keep this model up to date it must be retrained seasonally or in some other cyclical manner. But, these Emoji relationships are significant and Nike, in this instance, could benefit from utilizing Emojis in its discourse with its customers to communicate with them in the same way they do online. they could utilize emojis such as the laughing Emoji and police lights in story-like messages and the fire and eyes Emojis to convey positive sentiment or that a product is "hot." While including Emojis may not directly lead to increased sales from higher engagement it will allow for Nike to converse with their potential customers in more similar of a fashion as they talk about Nike and its products.
